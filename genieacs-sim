@@ -9,8 +9,10 @@ if (!cluster.isMaster) {
   const acsUrl = process.env["ACS_URL"];
   const dataModel = process.env["DATA_MODEL"];
   const serialNumber = process.env["SERIAL_NUMBER"];
+  const cpeId = process.env["CPE_ID"];
+  const connectionRequestProtocol = process.env["CONNECTION_REQUEST_PROTOCOL"];
 
-  simulator.start(require(dataModel), serialNumber, acsUrl);
+  simulator.start(require(dataModel), serialNumber, acsUrl, cpeId, connectionRequestProtocol);
   return;
 }
 
@@ -20,14 +22,26 @@ function resolvePath(p) {
   return require("path").resolve(process.cwd(), p);
 }
 
+function resolveSerialNumber(sn) {
+  console.log(`Serial Number: ${sn}`);
+  return sn;
+}
+
+function resolveCpeId(cpeId) {
+  console.log(`CPE id: ${cpeId}`);
+  return cpeId;
+}
+
 const program = require("commander")
   .version(pkg.version)
   .description(pkg.description)
-  .option("-u, --acs-url [url]", "ACS URL to contact (default: http://127.0.0.1:7547/)", "http://127.0.0.1:7547/")
+  .option("-u, --acs-url [url]", "ACS URL to contact", "http://127.0.0.1:7547/")
   .option("-m, --data-model [filename]", "Data model template", resolvePath, "./data_model_202BC1-BM632w-8KA8WA1151100043.json")
   .option("-p, --processes [count]", "Number of devices to simulate (default: 1)", parseFloat, 1)
-  .option("-w, --wait [milliseconds]", "Waiting period between process spawning (default: 1000)", parseFloat, 1000)
-  .option("-s, --serial [offset]", "Serial number offset (default: 0)", parseFloat, 0)
+  .option("-w, --wait [milliseconds]", "Waiting period between process spawning", parseFloat, 1000)
+  .option("-s, --serial [offset]", "Serial number offset", resolveSerialNumber, "000000")
+  .option("-c, --cpe-id [ip]", "Simulate a known CPE on network", resolveCpeId)
+  .option("-r, --connection-request-protocol [http/https]", "Http protocol to listen Connection Request", "http")
   .parse(process.argv);
 
 if (!/^(http|https):\/\//.test(program.acsUrl)) {
@@ -51,9 +65,11 @@ cluster.on("exit", function(worker, code, signal) {
 for (let i = 0; i < program.processes; ++ i) {
   setTimeout(function() {
     let env = {
-      "SERIAL_NUMBER": `00000${program.serial + i}`.slice(-6),
+      "SERIAL_NUMBER": program.serial,
       "ACS_URL": program.acsUrl,
       "DATA_MODEL": program.dataModel,
+      "CPE_ID": program.cpeId,
+      "CONNECTION_REQUEST_PROTOCOL": program.connectionRequestProtocol
     };
     let worker = cluster.fork(env);
     worker.env = env;

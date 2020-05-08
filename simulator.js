@@ -20,6 +20,7 @@ let requestOptions = null;
 let device = null;
 let httpAgent = null;
 let basicAuth;
+let headerCpeId = null;
 
 
 function createSoapDocument(id, body) {
@@ -47,13 +48,18 @@ function sendRequest(xml, callback) {
   headers["Content-Type"] = "text/xml; charset=\"utf-8\"";
   headers["Authorization"]= basicAuth;
 
+  if (headerCpeId) {
+    headers["cpe-id"] = headerCpeId;
+  }
+
   if (device._cookie)
     headers["Cookie"] = device._cookie;
 
   let options = {
     method: "POST",
     headers: headers,
-    agent: httpAgent
+    agent: httpAgent,
+    rejectUnauthorized: false
   };
 
   Object.assign(options, requestOptions);
@@ -218,7 +224,7 @@ function handleMethod(xml) {
   });
 }
 
-function listenForConnectionRequests(serialNumber, acsUrlOptions, callback) {
+function listenForConnectionRequests(serialNumber, acsUrlOptions, connectionRequestProtocol, callback) {
   let ip, port;
   // Start a dummy socket to get the used local ip
   let socket = net.createConnection({
@@ -233,9 +239,9 @@ function listenForConnectionRequests(serialNumber, acsUrlOptions, callback) {
     socket.end();
   })
   .on("close", () => {
-    const connectionRequestUrl = `http://${ip}:${port}/`;
-
-    const httpServer = http.createServer((_req, res) => {
+    const connectionRequestUrl = `${connectionRequestProtocol}://${ip}:${port}/`;
+    const connectionRequestServer = require(connectionRequestProtocol);
+    const httpServer = connectionRequestServer.createServer((_req, res) => {
       console.log(`Simulator ${serialNumber} got connection request`);
       res.end();
         // A session is ongoing when nextInformTimeout === null
@@ -258,7 +264,7 @@ function listenForConnectionRequests(serialNumber, acsUrlOptions, callback) {
   });
 }
 
-function start(dataModel, serialNumber, acsUrl) {
+function start(dataModel, serialNumber, acsUrl, cpeId, connectionRequestProtocol) {
   device = dataModel;
 
   if (device["Device.DeviceInfo.SerialNumber"])
@@ -277,12 +283,13 @@ function start(dataModel, serialNumber, acsUrl) {
   }
 
   basicAuth = "Basic " + Buffer.from(`${username}:${password}`).toString("base64");
+  headerCpeId = cpeId;
 
   requestOptions = require("url").parse(acsUrl);
   http = require(requestOptions.protocol.slice(0, -1));
   httpAgent = new http.Agent({keepAlive: true, maxSockets: 1});
 
-  listenForConnectionRequests(serialNumber, requestOptions, (err, connectionRequestUrl) => {
+  listenForConnectionRequests(serialNumber, requestOptions, connectionRequestProtocol, (err, connectionRequestUrl) => {
     if (err) throw err;
     if (device["InternetGatewayDevice.ManagementServer.ConnectionRequestURL"]) {
       device["InternetGatewayDevice.ManagementServer.ConnectionRequestURL"][1] = connectionRequestUrl;

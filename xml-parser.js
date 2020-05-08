@@ -129,6 +129,10 @@ function decodeEntities(string) {
 }
 
 function encodeEntities(string) {
+  if (!string) {
+    return "";
+  }
+
   const entities = {
     "&": "&amp;",
     '"': "&quot;",
